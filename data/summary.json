@@ -1,0 +1,27 @@
+{
+ "built_at": "2026-11-11T15:52:22Z",
+ "markets_by_generation": {
+  "dpm-auto": 479,
+  "lmsr": 162
+ },
+ "decisions": 587,
+ "by_generation_status": {
+  "dpm-auto/failed": 38,
+  "dpm-auto/settled": 432,
+  "lmsr/failed": 6,
+  "lmsr/settled": 111
+ },
+ "rules_hash": {
+  "True": 640,
+  "False": 1
+ },
+ "fail_reasons": {
+  "dpm-auto/reason=2": 37,
+  "lmsr/reason=2": 6,
+  "dpm-auto/reason=0": 1
+ },
+ "judge_models": {
+  "Qwen3 32B Verifiable (via REE)": 346,
+  "Qwen/Qwen3-32B": 241
+ }
+}
