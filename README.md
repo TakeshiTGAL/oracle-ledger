@@ -10,6 +10,12 @@ This is the prototype behind a Gensyn Foundation grant application. The committe
 
 `cache/` holds the decoded logs and metadata files used for the snapshot, so the build runs offline and gives the same summary.
 
+## Check against Delphi's official sources
+
+    python3 check_official.py   # needs network, no API key
+
+It reads the SDK address table and the official autoset subgraph and prints whether the snapshot's DPM settled and failed markets match the subgraph and how many LMSR decisions the subgraph has.
+
 ## Refresh from the chain
 
     python3 fetch.py <address>...   # pulls decoded logs from the public Gensyn explorer into cache/
