@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oracle Ledger</title>
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --muted:#666; --line:#e3e3e3; --ok:#1a7f37; --bad:#c62828; --accent:#2f5bd3; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111; --fg:#eee; --muted:#9a9a9a; --line:#2c2c2c; --ok:#4cc26b; --bad:#ff6b6b; --accent:#7ea2ff; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, -apple-system, sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 20px; }
+  .stats { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+  .stat { border:1px solid var(--line); border-radius:8px; padding:10px 14px; min-width:120px; }
+  .stat b { display:block; font-size:20px; }
+  .stat span { color:var(--muted); font-size:13px; }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+  input, select { font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+  input { flex:1; min-width:240px; }
+  .wrap { overflow-x:auto; border:1px solid var(--line); border-radius:8px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { position:sticky; top:0; background:var(--bg); }
+  td.q { min-width:260px; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); font-weight:600; }
+  a { color:var(--accent); }
+  code { font-size:12px; }
+  footer { color:var(--muted); font-size:13px; margin-top:16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Oracle Ledger</h1>
+  <p class="sub">One row for every Delphi oracle decision from the two known automated-settlement factories. Snapshot of Gensyn mainnet, 2026-11-11. Built from public chain events and hash-checked market metadata.</p>
+  <div class="stats" id="stats"></div>
+  <div class="controls">
+    <input id="q" placeholder="Paste a market address or search the question text" autocomplete="off">
+    <select id="f">
+      <option value="all">All decisions</option>
+      <option value="failed">Failed only</option>
+      <option value="mismatch">Rules hash mismatch</option>
+      <option value="lmsr">LMSR generation</option>
+    </select>
+  </div>
+  <div class="wrap"><table>
+    <thead><tr><th>Market</th><th class="q">Question</th><th>Generation</th><th>Status</th><th>Failure reason</th><th>Outcome</th><th>Rules hash</th><th>Judge (from metadata)</th><th>Settlement tx</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="9">Loading data/decisions.csv</td></tr></tbody>
+  </table></div>
+  <footer>Showing <span id="n">0</span> rows (max 200 at once). Source and rebuild steps: <a href="https://github.com/TakeshiTGAL/oracle-ledger">github.com/TakeshiTGAL/oracle-ledger</a>. Failure reasons come from the verified relayer enum.</footer>
+</main>
+<script>
+const REASONS = { "0": "EXECUTION_FAILED", "1": "MALFORMED_RESULT", "2": "INVALID_OUTCOME" };
+const EXPLORER = "https://gensyn-mainnet.explorer.alchemy.com";
+let data = [];
+
+function parseCSV(text) {
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') q = false;
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if (c !== "\r") cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  const head = rows.shift();
+  return rows.filter(r => r.length === head.length).map(r => Object.fromEntries(head.map((h, i) => [h, r[i]])));
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
+function short(a) { return a ? a.slice(0, 6) + "…" + a.slice(-4) : ""; }
+
+function stat(label, value) { return `<div class="stat"><b>${value}</b><span>${label}</span></div>`; }
+
+function render() {
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const f = document.getElementById("f").value;
+  let rows = data.filter(r => {
+    if (f === "failed" && r.status !== "failed") return false;
+    if (f === "mismatch" && r.rules_hash_ok !== "False") return false;
+    if (f === "lmsr" && r.generation !== "lmsr") return false;
+    if (!q) return true;
+    return r.market.toLowerCase().includes(q) || r.question.toLowerCase().includes(q);
+  });
+  document.getElementById("n").textContent = rows.length;
+  rows = rows.slice(0, 200);
+  document.getElementById("rows").innerHTML = rows.map(r => {
+    const hash = r.rules_hash_ok === "True" ? '<span class="ok">match</span>' : r.rules_hash_ok === "False" ? '<span class="bad">mismatch</span>' : esc(r.rules_hash_ok || "missing");
+    const reason = r.status === "failed" ? `<span class="bad">${esc(REASONS[r.fail_reason] || r.fail_reason)}</span>` : "";
+    const tx = r.tx ? `<a href="${EXPLORER}/tx/${esc(r.tx)}" target="_blank" rel="noopener">${esc(short(r.tx))}</a>` : "";
+    return `<tr><td><a href="${EXPLORER}/address/${esc(r.market)}" target="_blank" rel="noopener"><code>${esc(short(r.market))}</code></a></td>
+      <td class="q">${esc(r.question)}</td><td>${esc(r.generation)}</td><td>${esc(r.status)}</td><td>${reason}</td>
+      <td>${esc(r.outcome)}</td><td>${hash}</td><td>${esc(r.judge_model)}</td><td>${tx}</td></tr>`;
+  }).join("") || '<tr><td colspan="9">No matching decisions</td></tr>';
+}
+
+fetch("data/decisions.csv").then(r => r.text()).then(t => {
+  data = parseCSV(t);
+  const failed = data.filter(r => r.status === "failed").length;
+  const mismatch = data.filter(r => r.rules_hash_ok === "False").length;
+  const lmsr = data.filter(r => r.generation === "lmsr").length;
+  document.getElementById("stats").innerHTML =
+    stat("oracle decisions", data.length) + stat("failed", failed) + stat("LMSR decisions", lmsr) + stat("rules hash mismatch", mismatch);
+  const m = new URLSearchParams(location.search).get("market");
+  if (m) document.getElementById("q").value = m;
+  render();
+}).catch(() => { document.getElementById("rows").innerHTML = '<tr><td colspan="9">Could not load data/decisions.csv</td></tr>'; });
+
+document.getElementById("q").addEventListener("input", render);
+document.getElementById("f").addEventListener("change", render);
+</script>
+</body>
+</html>

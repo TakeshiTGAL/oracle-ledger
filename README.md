@@ -4,6 +4,8 @@ One row for every Delphi oracle decision on Gensyn mainnet, built from public ch
 
 This is the prototype behind a Gensyn Foundation grant application. The committed data is a snapshot built on 2026-11-11.
 
+Browse the snapshot: https://takeshitgal.github.io/oracle-ledger/ (paste a market address, or add ?market=<address> to the URL)
+
 ## Reproduce the snapshot
 
     python3 build.py        # reads cache/, writes data/decisions.csv and data/summary.json
